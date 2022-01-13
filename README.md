@@ -1,0 +1,2 @@
+# solCurrency
+Token on Solana
