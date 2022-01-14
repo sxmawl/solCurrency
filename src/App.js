@@ -198,53 +198,74 @@ const App = () => {
     }
   };
 
-  const transferTokenHelper = async () =>{
+const transferTokenHelper = async () => {
+    try {
+       setLoading(true);
+       
+       const connection = new Connection(
+          clusterApiUrl("devnet"),
+          "confirmed"
+       );
+       
+       const createMintingWallet = Keypair.fromSecretKey(Uint8Array.from(Object.values(JSON.parse(mintingWalletSecretKey))));
+       const receiverWallet = new PublicKey("HZK6r3xjWcZHW8Q55QexBxSpEX5EN5JA7Q94t3K1UHw1");
+       
+       const fromAirDropSignature = await connection.requestAirdrop(provider.publicKey, LAMPORTS_PER_SOL);
+       await connection.confirmTransaction(fromAirDropSignature, { commitment: "confirmed" });
+       console.log('1 SOL airdropped to the wallet for fee');
+       
+       const creatorToken = new Token(connection, createdTokenPublicKey, TOKEN_PROGRAM_ID, createMintingWallet);
+       const fromTokenAccount = await creatorToken.getOrCreateAssociatedAccountInfo(provider.publicKey);
+       const toTokenAccount = await creatorToken.getOrCreateAssociatedAccountInfo(receiverWallet);
+       
+       const transaction = new Transaction().add(
+          Token.createTransferInstruction(TOKEN_PROGRAM_ID, fromTokenAccount.address, toTokenAccount.address, provider.publicKey, [], 10000000)
+       );
+       transaction.feePayer=provider.publicKey;
+       let blockhashObj = await connection.getRecentBlockhash();
+       console.log("blockhashObj", blockhashObj);
+       transaction.recentBlockhash = await blockhashObj.blockhash;
+ 
+       if (transaction) {
+          console.log("Txn created successfully");
+       }
+       
+       let signed = await provider.signTransaction(transaction);
+       let signature = await connection.sendRawTransaction(signed.serialize());
+       await connection.confirmTransaction(signature);
+       
+       console.log("SIGNATURE: ", signature);
+       setLoading(false);
+    } catch(err) {
+       console.log(err)
+       setLoading(false);
+    }
+ }
 
+const capSupplyHelper = async () => {
     try {
         setLoading(true);
-
         const connection = new Connection(
             clusterApiUrl("devnet"),
             "confirmed"
         )
 
-        const createMintingWallet = Keypair.fromSecretKey(Uint8Array.from(Object.values(JSON.parse(mintingWalletSecretKey))));
-        const receiverWallet = new PublicKey("HZK6r3xjWcZHW8Q55QexBxSpEX5EN5JA7Q94t3K1UHw1");
+        
+       const createMintingWallet = Keypair.fromSecretKey(Uint8Array.from(Object.values(JSON.parse(mintingWalletSecretKey))));
+       const fromAirDropSignature = await connection.requestAirdrop(createMintingWallet.publicKey, LAMPORTS_PER_SOL);
+       await connection.confirmTransaction(fromAirDropSignature);
 
-        const fromAirDropSignature = await connection.requestAirdrop(createMintingWallet.publicKey, LAMPORTS_PER_SOL);
-        await connection.confirmTransaction(fromAirDropSignature, {commitment:"confirmed"});
-        console.log('1 SOL airdropped to the wallet for fee');
+       const creatorToken = new Token(connection, createdTokenPublicKey, TOKEN_PROGRAM_ID, createMintingWallet);
+       await creatorToken.setAuthority(createdTokenPublicKey, null, "MintTokens", createMintingWallet.publicKey,[createMintingWallet]);
 
-        const creatorToken = new Token(connection, createdTokenPublicKey, TOKEN_PROGRAM_ID, createMintingWallet);
-        const fromTokenAccount = await creatorToken.getOrCreateAssociatedAccountInfo(createMintingWallet.publicKey);
-        const toTokenAccount = await creatorToken.getOrCreateAssociatedAccountInfo(receiverWallet);
-
-        const transaction = new Transaction().add(
-            Token.createTransferInstruction(TOKEN_PROGRAM_ID, fromTokenAccount.address, toTokenAccount.address, provider.publicKey, [], 10000000)
-         );
-         transaction.feePayer=provider.publicKey;
-         let blockhashObj = await connection.getRecentBlockhash();
-         console.log("blockhashObj", blockhashObj);
-         transaction.recentBlockhash = await blockhashObj.blockhash;
-   
-         if (transaction) {
-            console.log("Txn created successfully");
-         }
-         
-         let signed = await provider.signTransaction(transaction);
-         let signature = await connection.sendRawTransaction(signed.serialize());
-         await connection.confirmTransaction(signature);
-         
-         console.log("SIGNATURE: ", signature);
-         setLoading(false);
-
+       setSupplyCapped(true);
+       setLoading(false);
 
     } catch (error) {
         setLoading(false);
-        console.error(error);
+        console.log(error);
     }
-
-  }
+}
 
   //  JSX start
 
@@ -285,7 +306,7 @@ const App = () => {
       {isTokenCreated ? (
         <li>
           Transfer 10 tokens to your friend's wallet:{" "}
-          <button disabled={loading || supplyCapped} onClick={transferTokenHelper}>
+          <button disabled={loading} onClick={transferTokenHelper}>
             Send Tokens
           </button>
         </li>
@@ -293,13 +314,24 @@ const App = () => {
         <></>
       )}
 
+      {isTokenCreated ? (
+        <li>
+          Cap Token Cupply:{" "}
+          <button disabled={loading} onClick={capSupplyHelper}>
+            Cap Supply
+          </button>
+        </li>
+      ) : (
+        <></>
+      )}
+
       {walletConnected ? (
-        <p>
+        <li>
           Airdrop 1 SOL into your wallet
           <button disabled={loading} onClick={airDropHelper}>
             AirDrop SOL{" "}
           </button>
-        </p>
+        </li>
       ) : (
         <></>
       )}
